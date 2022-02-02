@@ -44,7 +44,8 @@ for func in funcs:
                     xrefs.append((r.fromAddress, r.toAddress))
         for xref in xrefs:
                 if getFunctionContaining(xref[0]) in fnames:
-                    fnames[getFunctionContaining(xref[0])].append((func.getName(), xref[1]))
+                    if (func.getName(), xref[1]) not in fnames[getFunctionContaining(xref[0])]:
+                        fnames[getFunctionContaining(xref[0])].append((func.getName(), xref[1]))
                 else:
                     fnames[getFunctionContaining(xref[0])] = [(func.getName(), xref[1])]
 
@@ -58,13 +59,30 @@ ifc.openProgram(currentProgram)
 print("-------------------------------------------------------")
 fkeys = fnames.keys()
 fkeys.sort()
+#get the calls within each function in ascending order
+#may not be 100% accurate for execution order based on function logic
+#but is at least cleaner
+
 for fkey in fkeys:
     print("-------------------------------------------------------")
     print("{}".format(fkey.getName().center(54)))
     print("-------------------------------------------------------")
     calls = fnames[fkey]
+    strcpy_exists = 0 
+    strlen_exists = 0
     for call in calls:
-        print(call)
+        if call[0] == "strlen":
+            strlen_exists = 1
+        elif call[0] == "strcpy":
+            strcpy_exists = 1
+
+    if(strcpy_exists == 1 and strlen_exists == 1):
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("!!!STRCPY EXISTS IN FUNCTION WITHOUT ANY STRLEN CALLS!!!")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!") 
+
+    calls.sort(key = lambda x: x[1])
+    for call in calls:
         local_variables = fkey.getAllVariables()
         res = ifc.decompileFunction(fkey, 60, monitor)
         high_func = res.getHighFunction()
