@@ -81,7 +81,6 @@ for fkey in fkeys:
         print("!!!STRCPY EXISTS IN FUNCTION WITHOUT ANY STRLEN CALLS!!!")
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!") 
 
-    calls.sort(key = lambda x: x[1])
     for call in calls:
         local_variables = fkey.getAllVariables()
         res = ifc.decompileFunction(fkey, 60, monitor)

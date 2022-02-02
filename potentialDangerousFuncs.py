@@ -4,12 +4,12 @@ from ghidra.util.task import ConsoleTaskMonitor
 
 TARGET_FUNC = "memcpy"
 TARGET_FUNCS = [
-            "strcpy",
+#            "strcpy",
             "strcat",
             "sprintf",
             "vsprintf",
             "gets",
-            "strlen",
+#            "strlen",
             "scanf",
             "fscanf",
             "sscanf",
@@ -56,7 +56,7 @@ for func in funcs:
                     xrefs.append((r.fromAddress, r.toAddress))
         for xref in xrefs:
                 call = getFunctionContaining(xref[0])
-                calls.append((func.getName(), call, xref[1]))
+                calls.append((call, xref[1]))
         calls = list(set(calls))
         fnames[func.getName()] = calls
 
@@ -75,11 +75,9 @@ for fkey in fkeys:
     print("{}".format(fkey.center(54)))
     print("-------------------------------------------------------")
     calls = fnames[fkey]
-    #sort the calls in ascending address order
-    calls.sort(key = lambda x: x[2])
     for call in calls:
-        local_variables = call[1].getAllVariables()
-        res = ifc.decompileFunction(call[1], 60, monitor)
+        local_variables = call[0].getAllVariables()
+        res = ifc.decompileFunction(call[0], 60, monitor)
         high_func = res.getHighFunction()
         lsm = high_func.getLocalSymbolMap()
         symbols = lsm.getSymbols()
@@ -92,8 +90,8 @@ for fkey in fkeys:
                     inputs = op.getInputs()
                     addr = inputs[0].getAddress()
                     args = inputs[1:] # List of VarnodeAST types
-                    if addr == call[2]:
-                        print("Call to {} at {} in {} has {} argument/s:\n\t{}".format(call[0], op.getSeqnum().getTarget(), call[1].getName(), len(args), [x for x in args]))
+                    if addr == call[1]:
+                        print("Call to {} at {} in {} has {} argument/s:\n\t{}".format(fkey, op.getSeqnum().getTarget(), call[0].getName(), len(args), [x for x in args]))
                         for arg in args:
                             vndef = arg.getDef()
                             if vndef:
