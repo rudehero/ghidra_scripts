@@ -75,6 +75,8 @@ for fkey in fkeys:
     print("{}".format(fkey.center(54)))
     print("-------------------------------------------------------")
     calls = fnames[fkey]
+    #sort the calls in ascending address order
+    calls.sort(key = lambda x: x[2])
     for call in calls:
         local_variables = call[1].getAllVariables()
         res = ifc.decompileFunction(call[1], 60, monitor)
