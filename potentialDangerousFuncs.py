@@ -6,8 +6,8 @@ TARGET_FUNC = "memcpy"
 TARGET_FUNCS = [
 #            "strcpy",
             "strcat",
-            "sprintf",
-            "vsprintf",
+            "sf.writef",
+            "vsf.writef",
             "gets",
 #            "strlen",
             "scanf",
@@ -38,12 +38,13 @@ fm = currentProgram.getFunctionManager()
 funcs = fm.getExternalFunctions()
 target_addr = 0
 fnames = dict()
-print("-------------------------------------------------------")
+f = open(currentProgram.getName() + ".dangFuncs.txt", 'w')
+f.write("-------------------------------------------------------\n")
 for func in funcs:
     #if func.getName() == TARGET_FUNC:
     if func.getName() in TARGET_FUNCS:
         calls = []
-        print("\nFound {} @ 0x{}".format(func.getName(), func.getEntryPoint()))
+        f.write("\nFound {} @ 0x{}\n".format(func.getName(), func.getEntryPoint()))
         thunks = func.getFunctionThunkAddresses()
         thunk = thunks[0]
         refs = getReferencesTo(thunk)
@@ -67,13 +68,13 @@ ifc = DecompInterface()
 ifc.setOptions(options)
 ifc.openProgram(currentProgram)
 
-print("-------------------------------------------------------")
+f.write("-------------------------------------------------------\n")
 fkeys = fnames.keys()
 fkeys.sort()
 for fkey in fkeys:
-    print("-------------------------------------------------------")
-    print("{}".format(fkey.center(54)))
-    print("-------------------------------------------------------")
+    f.write("-------------------------------------------------------\n")
+    f.write("{}\n".format(fkey.center(54)))
+    f.write("-------------------------------------------------------\n")
     calls = fnames[fkey]
     for call in calls:
         local_variables = call[0].getAllVariables()
@@ -91,7 +92,7 @@ for fkey in fkeys:
                     addr = inputs[0].getAddress()
                     args = inputs[1:] # List of VarnodeAST types
                     if addr == call[1]:
-                        print("Call to {} at {} in {} has {} argument/s:\n\t{}".format(fkey, op.getSeqnum().getTarget(), call[0].getName(), len(args), [x for x in args]))
+                        f.write("Call to {} at {} in {} has {} argument/s:\n\t{}\n".format(fkey, op.getSeqnum().getTarget(), call[0].getName(), len(args), [x for x in args]))
                         for arg in args:
                             vndef = arg.getDef()
                             if vndef:
@@ -101,7 +102,7 @@ for fkey in fkeys:
                                     for lv in local_variables:
                                         unsigned_lv_offset = lv.getMinAddress().getUnsignedOffset() & bitmask
                                         if unsigned_lv_offset == defop_input_offset:
-                                            print("\tArg {} {} : {}".format(args.index(arg), arg, lv))
+                                            f.write("\tArg {} {} : {}\n".format(args.index(arg), arg, lv))
                 # If             we get here, varnode is likely a "acStack##" variable.
                                 for vndef_input in vndef_inputs:
                                     defop_input_offset = vndef_input.getAddress().getOffset() & bitmask
@@ -110,4 +111,5 @@ for fkey in fkeys:
                                             pass
                                         if defop_input_offset == symbol.getStorage().getFirstVarnode().getOffset() & bitmask:
                                             pass
-                        print(" ")
+                        f.write("\n")
+f.close()
