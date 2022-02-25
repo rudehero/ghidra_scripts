@@ -38,13 +38,13 @@ fm = currentProgram.getFunctionManager()
 funcs = fm.getExternalFunctions()
 target_addr = 0
 fnames = dict()
-f = open(currentProgram.getName() + ".dangFuncs.txt", 'w')
-f.write("-------------------------------------------------------\n")
+out = ""
+out += "-------------------------------------------------------\n"
 for func in funcs:
     #if func.getName() == TARGET_FUNC:
     if func.getName() in TARGET_FUNCS:
         calls = []
-        f.write("\nFound {} @ 0x{}\n".format(func.getName(), func.getEntryPoint()))
+        out += "\nFound {} @ 0x{}\n".format(func.getName(), func.getEntryPoint())
         thunks = func.getFunctionThunkAddresses()
         thunk = thunks[0]
         refs = getReferencesTo(thunk)
@@ -68,13 +68,13 @@ ifc = DecompInterface()
 ifc.setOptions(options)
 ifc.openProgram(currentProgram)
 
-f.write("-------------------------------------------------------\n")
+out += "-------------------------------------------------------\n"
 fkeys = fnames.keys()
 fkeys.sort()
 for fkey in fkeys:
-    f.write("-------------------------------------------------------\n")
-    f.write("{}\n".format(fkey.center(54)))
-    f.write("-------------------------------------------------------\n")
+    out += "-------------------------------------------------------\n"
+    out += "{}\n".format(fkey.center(54))
+    out += "-------------------------------------------------------\n"
     calls = fnames[fkey]
     for call in calls:
         callerVariables = call[0].getAllVariables()
@@ -92,9 +92,9 @@ for fkey in fkeys:
                     addr = inputs[0].getAddress()
                     args = inputs[1:] # List of VarnodeAST types
                     if addr == call[1]:
-                        f.write("Call to {} at {} in {} has {} argument/s:\n\t{}\n".format(fkey, op.getSeqnum().getTarget(), call[0].getName(), len(args), [x for x in args]))
+                        out += "Call to {} at {} in {} has {} argument/s:\n\t{}\n".format(fkey, op.getSeqnum().getTarget(), call[0].getName(), len(args), [x for x in args])
                         for arg in args:
-                            f.write("\tArg {}:\n".format(args.index(arg)))
+                            out += "\tArg {}:\n".format(args.index(arg))
                             vndef = arg.getDef()
                             if vndef:
                                 vndef_inputs = vndef.getInputs()
@@ -103,14 +103,18 @@ for fkey in fkeys:
                                     for cv in callerVariables:
                                         unsigned_cv_offset = cv.getMinAddress().getUnsignedOffset() & bitmask
                                         if unsigned_cv_offset == defop_input_offset:
-                                            f.write("\t\t{}\n".format(cv))
+                                            out += "\t\t{}\n".format(cv)
                                     for symbol in lsm.getSymbols():
                                         if defop_input_offset == symbol.getStorage().getLastVarnode().getOffset() & bitmask:
-                                            #f.write("\t\t{} \n".format(symbol.getName()))
-                                            #f.write("\t\tType: {}\n".format(symbol.dataType))
-                                            #f.write("\t\tSize: {}\n".format(symbol.size))
-                                            #f.write("\t\tStor: {}\n".format(symbol.storage))
+                                            #out += "\t\t{} \n".format(symbol.getName()))
+                                            #out += "\t\tType: {}\n".format(symbol.dataType))
+                                            #out += "\t\tSize: {}\n".format(symbol.size))
+                                            #out += "\t\tStor: {}\n".format(symbol.storage))
                                             if(symbol.isParameter()):
-                                                f.write("\t\tIs calling func parameter\n".format(args.index(arg)))
-                        f.write("\n")
-f.close()
+                                                out += "\t\tIs calling func parameter\n".format(args.index(arg))
+                        out += "\n"
+
+if("Found" in out):
+    f = open(currentProgram.getName() + ".dangFuncs.txt", 'w')
+    f.write(out)
+    f.close()
