@@ -123,7 +123,10 @@ for fkey in fkeys:
                                                 out += "\t\tIs calling func parameter\n".format(args.index(arg))
                         out += "\n"
 if( "strcpy" in out):
-    f = open(currentProgram.getName() + ".strCpyNoStrLen.txt", 'w')
+    if ( "EXISTS" in out):
+        f = open(currentProgram.getName() + ".strCpyNoStrLen.txt", 'w')
+    else:
+        f = open(currentProgram.getName() + ".strCpy.txt", 'w')
     f.write(out)
     f.close()
 
