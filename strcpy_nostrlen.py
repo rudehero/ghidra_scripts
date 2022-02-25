@@ -26,12 +26,13 @@ fm = currentProgram.getFunctionManager()
 funcs = fm.getExternalFunctions()
 target_addr = 0
 fnames = dict()
-print("-------------------------------------------------------")
+f = open(currentProgram.getName() + ".strCpyNoStrLen.txt", 'w')
+f.write("-------------------------------------------------------\n")
 for func in funcs:
     #if func.getName() == TARGET_FUNC:
     if func.getName() in TARGET_FUNCS:
         calls = []
-        print("\nFound {} @ 0x{}".format(func.getName(), func.getEntryPoint()))
+        f.write("Found {} @ 0x{}\n".format(func.getName(), func.getEntryPoint()))
         thunks = func.getFunctionThunkAddresses()
         thunk = thunks[0]
         refs = getReferencesTo(thunk)
@@ -56,7 +57,7 @@ ifc = DecompInterface()
 ifc.setOptions(options)
 ifc.openProgram(currentProgram)
 
-print("-------------------------------------------------------")
+f.write("-------------------------------------------------------\n")
 fkeys = fnames.keys()
 fkeys.sort()
 #get the calls within each function in ascending order
@@ -64,9 +65,9 @@ fkeys.sort()
 #but is at least cleaner
 
 for fkey in fkeys:
-    print("-------------------------------------------------------")
-    print("{}".format(fkey.getName().center(54)))
-    print("-------------------------------------------------------")
+    f.write("-------------------------------------------------------\n")
+    f.write("{}\n".format(fkey.getName().center(54)))
+    f.write("-------------------------------------------------------\n")
     calls = fnames[fkey]
     strcpy_exists = 0 
     strlen_exists = 0
@@ -76,13 +77,13 @@ for fkey in fkeys:
         elif call[0] == "strcpy":
             strcpy_exists = 1
 
-    if(strcpy_exists == 1 and strlen_exists == 1):
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        print("!!!STRCPY EXISTS IN FUNCTION WITHOUT ANY STRLEN CALLS!!!")
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!") 
+    if(strcpy_exists == 1 and not strlen_exists == 1):
+        f.write("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+        f.write("!!!STRCPY EXISTS IN FUNCTION WITHOUT ANY STRLEN CALLS!!!\n")
+        f.write("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n") 
 
     for call in calls:
-        local_variables = fkey.getAllVariables()
+        callerVariables = fkey.getAllVariables()
         res = ifc.decompileFunction(fkey, 60, monitor)
         high_func = res.getHighFunction()
         lsm = high_func.getLocalSymbolMap()
@@ -97,23 +98,26 @@ for fkey in fkeys:
                     addr = inputs[0].getAddress()
                     args = inputs[1:] # List of VarnodeAST types
                     if addr == call[1]:
-                        print("Call to {} at {} has {} argument/s:\n\t{}".format(call[0], op.getSeqnum().getTarget(), len(args), [x for x in args]))
+                        f.write("Call in {} at {} to {} has {} argument/s:\n\t{}\n".format(fkey, op.getSeqnum().getTarget(), call[0], len(args), [x for x in args]))
                         for arg in args:
+                            f.write("\tArg {}:\n".format(args.index(arg)))
                             vndef = arg.getDef()
                             if vndef:
                                 vndef_inputs = vndef.getInputs()
                                 for defop_input in vndef_inputs:
                                     defop_input_offset = defop_input.getAddress().getOffset() & bitmask
-                                    for lv in local_variables:
-                                        unsigned_lv_offset = lv.getMinAddress().getUnsignedOffset() & bitmask
-                                        if unsigned_lv_offset == defop_input_offset:
-                                            print("\tArg {} {} : {}".format(args.index(arg), arg, lv))
-                # If             we get here, varnode is likely a "acStack##" variable.
-                                for vndef_input in vndef_inputs:
-                                    defop_input_offset = vndef_input.getAddress().getOffset() & bitmask
+                                    for cv in callerVariables:
+                                        unsigned_cv_offset = cv.getMinAddress().getUnsignedOffset() & bitmask
+                                        if unsigned_cv_offset == defop_input_offset:
+                                            f.write("\t\t{}\n".format(cv))
                                     for symbol in lsm.getSymbols():
-                                        if symbol.isParameter(): 
-                                            pass
-                                        if defop_input_offset == symbol.getStorage().getFirstVarnode().getOffset() & bitmask:
-                                            pass
-                        print(" ")
+                                        if defop_input_offset == symbol.getStorage().getLastVarnode().getOffset() & bitmask:
+                                            #f.write("\t\t{} \n".format(symbol.getName()))
+                                            #f.write("\t\tType: {}\n".format(symbol.dataType))
+                                            #f.write("\t\tSize: {}\n".format(symbol.size))
+                                            #f.write("\t\tStor: {}\n".format(symbol.storage))
+                                            if(symbol.isParameter()):
+                                                f.write("\t\tIs calling func parameter\n".format(args.index(arg)))
+                        f.write("\n")
+f.close()
+
