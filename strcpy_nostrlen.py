@@ -27,8 +27,6 @@ funcs = fm.getExternalFunctions()
 target_addr = 0
 fnames = dict()
 out = ""
-out + = currentProgram.getName() + ".strCpyNoStrLen.txt", 'w')
-
 out += "-------------------------------------------------------\n"
 for func in funcs:
     #if func.getName() == TARGET_FUNC:
