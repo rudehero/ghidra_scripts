@@ -77,7 +77,7 @@ for fkey in fkeys:
     f.write("-------------------------------------------------------\n")
     calls = fnames[fkey]
     for call in calls:
-        local_variables = call[0].getAllVariables()
+        callerVariables = call[0].getAllVariables()
         res = ifc.decompileFunction(call[0], 60, monitor)
         high_func = res.getHighFunction()
         lsm = high_func.getLocalSymbolMap()
@@ -94,22 +94,23 @@ for fkey in fkeys:
                     if addr == call[1]:
                         f.write("Call to {} at {} in {} has {} argument/s:\n\t{}\n".format(fkey, op.getSeqnum().getTarget(), call[0].getName(), len(args), [x for x in args]))
                         for arg in args:
+                            f.write("\tArg {}:\n".format(args.index(arg)))
                             vndef = arg.getDef()
                             if vndef:
                                 vndef_inputs = vndef.getInputs()
                                 for defop_input in vndef_inputs:
                                     defop_input_offset = defop_input.getAddress().getOffset() & bitmask
-                                    for lv in local_variables:
-                                        unsigned_lv_offset = lv.getMinAddress().getUnsignedOffset() & bitmask
-                                        if unsigned_lv_offset == defop_input_offset:
-                                            f.write("\tArg {} {} : {}\n".format(args.index(arg), arg, lv))
-                # If             we get here, varnode is likely a "acStack##" variable.
-                                for vndef_input in vndef_inputs:
-                                    defop_input_offset = vndef_input.getAddress().getOffset() & bitmask
+                                    for cv in callerVariables:
+                                        unsigned_cv_offset = cv.getMinAddress().getUnsignedOffset() & bitmask
+                                        if unsigned_cv_offset == defop_input_offset:
+                                            f.write("\t\t{}\n".format(cv))
                                     for symbol in lsm.getSymbols():
-                                        if symbol.isParameter(): 
-                                            pass
-                                        if defop_input_offset == symbol.getStorage().getFirstVarnode().getOffset() & bitmask:
-                                            pass
+                                        if defop_input_offset == symbol.getStorage().getLastVarnode().getOffset() & bitmask:
+                                            #f.write("\t\t{} \n".format(symbol.getName()))
+                                            #f.write("\t\tType: {}\n".format(symbol.dataType))
+                                            #f.write("\t\tSize: {}\n".format(symbol.size))
+                                            #f.write("\t\tStor: {}\n".format(symbol.storage))
+                                            if(symbol.isParameter()):
+                                                f.write("\t\tIs calling func parameter\n".format(args.index(arg)))
                         f.write("\n")
 f.close()
