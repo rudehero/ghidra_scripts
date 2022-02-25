@@ -65,8 +65,11 @@ fkeys.sort()
 #but is at least cleaner
 
 for fkey in fkeys:
-    out += "-------------------------------------------------------\n"
-    out += "{}\n".format(fkey.getName().center(54))
+    if(isinstance(fkey, None.__class__)):
+        continue
+    else:
+        out += "-------------------------------------------------------\n"
+        out += "{}\n".format(fkey.getName().center(54))
     out += "-------------------------------------------------------\n"
     calls = fnames[fkey]
     strcpy_exists = 0 
