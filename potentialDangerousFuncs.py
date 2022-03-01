@@ -118,7 +118,7 @@ for fkey in fkeys:
                                             searchString = r".*?{}.*?{}.*?\n".format(fkey, symbol.getName())
                                             matches = re.findall(searchString, code)
                                             for m in matches:
-                                                out += "\t\t{}".format(m)
+                                                out += "\t\t{}".format(m.lstrip())
                                             #out += "\t\t{} \n".format(symbol.getName()))
                                             #out += "\t\tType: {}\n".format(symbol.dataType))
                                             #out += "\t\tSize: {}\n".format(symbol.size))
