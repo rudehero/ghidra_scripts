@@ -1,6 +1,7 @@
 from ghidra.app.decompiler import DecompileOptions
 from ghidra.app.decompiler import DecompInterface
 from ghidra.util.task import ConsoleTaskMonitor
+import re
 
 TARGET_FUNC = "memcpy"
 TARGET_FUNCS = [
@@ -106,13 +107,23 @@ for fkey in fkeys:
                                             out += "\t\t{}\n".format(cv)
                                     for symbol in lsm.getSymbols():
                                         if defop_input_offset == symbol.getStorage().getLastVarnode().getOffset() & bitmask:
+                                            if(symbol.isParameter()):
+                                                out += "\t\tIs calling func parameter\n"
+                                            code = res.getDecompiledFunction().getC()
+                                            #super noisy...not sure how much it actually helps.
+                                            #when there's not a lot of output and not a lot of duplication it's pretty good
+                                            #prints all occurences of the argument in hte function
+                                            #searchString = r".*?{}.*?\n".format(symbol.getName())
+                                            #prints all occurences of the function in question with the parameter in question
+                                            searchString = r".*?{}.*?{}.*?\n".format(fkey, symbol.getName())
+                                            matches = re.findall(searchString, code)
+                                            for m in matches:
+                                                out += "\t\t{}".format(m)
                                             #out += "\t\t{} \n".format(symbol.getName()))
                                             #out += "\t\tType: {}\n".format(symbol.dataType))
                                             #out += "\t\tSize: {}\n".format(symbol.size))
                                             #out += "\t\tStor: {}\n".format(symbol.storage))
-                                            if(symbol.isParameter()):
-                                                out += "\t\tIs calling func parameter\n".format(args.index(arg))
-                        out += "\n"
+                        out += "\n----------------------------------\n"
 
 if("Found" in out):
     f = open(currentProgram.getName() + ".dangFuncs.txt", 'w')
