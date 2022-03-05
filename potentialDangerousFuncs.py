@@ -1,7 +1,12 @@
+from ghidra.app.emulator import EmulatorHelper
 from ghidra.app.decompiler import DecompileOptions
 from ghidra.app.decompiler import DecompInterface
 from ghidra.util.task import ConsoleTaskMonitor
+import ghidra.program.model.data
 import re
+
+#emulateIt = False
+emulateIt = True
 
 TARGET_FUNC = "memcpy"
 TARGET_FUNCS = [
@@ -123,6 +128,48 @@ for fkey in fkeys:
                                             #out += "\t\tType: {}\n".format(symbol.dataType))
                                             #out += "\t\tSize: {}\n".format(symbol.size))
                                             #out += "\t\tStor: {}\n".format(symbol.storage))
+                        #instantiate eumlator helper to try and track values
+                        if emulateIt:
+                            emuHelper = EmulatorHelper(currentProgram)
+                            #create a patterned buffer of data to use when pointers are in play
+                            #using a pre-created pattern file to save on execution time.  generated via:
+                            #/usr/share/metasploit-framework/tools/exploit/pattern_create.rb -l 10000
+                            with open("/home/rudehero/gits/ghidra_scripts/patternfile_10000", "rb") as f:
+                                pattern = f.read()
+                            #general int for when necessary
+                            num = 0x41
+                            #writing pattern to "random" address that hopefully won't clobber
+                            memAddr = currentProgram.getAddressFactory().getAddress("0xF000")
+                            emuHelper.writeMemory(memAddr, pattern)
+
+                            #create fake start conditions  to allow exeecution
+                            #caller fun = call[0], callee addr = op.getSeqnum().getTarget()
+                            #set end breakpoint at the call of interest
+                            emuHelper.setBreakpoint(op.getSeqnum().getTarget())
+                            #fake return address to check in case we short circuit out
+                            bogusReturn = currentProgram.getAddressFactory().getAddress("0")
+                            #pull addr for callee func and ensure int format
+                            calleeAddr = int("0x{}".format(call[0].getEntryPoint()), 16)
+                            emuHelper.writeRegister(emuHelper.getPCRegister(), calleeAddr)
+
+                            #figure out params needed to supply...
+                            numParams = call[0].getParameterCount()
+                            params = call[0].getParameters()
+                            for p in params:
+                                if(isinstance(p.getDataType(), ghidra.program.model.data.Pointer)):
+                                    emuHelper.writeRegister(p.getVariableStorage().getRegister(), int("0x{}".format(memAddr), 16))
+                                else:
+                                    emuHelper.writeRegister(p.getVariableStorage().getRegister(), num)
+
+                            #end emulation, clear out emuhelper
+                            emuHelper.dispose()
+
+
+
+                            
+
+
+
                         out += "\n----------------------------------\n"
 
 if("Found" in out):
