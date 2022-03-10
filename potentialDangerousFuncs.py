@@ -5,12 +5,13 @@ from ghidra.util.task import ConsoleTaskMonitor
 import ghidra.program.model.data
 import ghidra.pcode.emulate.EmulateExecutionState
 import re
-import struct
 #TODO -- Finalize emulation code; update to support 32 or 64 based on addr_size
 #cleanup all teh address factory calls
 
-#emulateIt = False
-emulateIt = True
+emulateIt = False
+args = getScriptArgs()
+if("emulate" in args):
+	emulateIt = True
 
 TARGET_FUNC = "memcpy"
 TARGET_FUNCS = [
@@ -158,7 +159,6 @@ for fkey in fkeys:
                             #pull addr for callee func and ensure int format
                             calleeAddr = int("0x{}".format(call[0].getEntryPoint()), 16)
                             emuHelper.writeRegister(emuHelper.getPCRegister(), calleeAddr)
-                            print(emuHelper.readRegister(emuHelper.getPCRegister()))
                             #set RBP and RSP values
                             stackAddr = int("0x{}".format(currentProgram.getAddressFactory().getDefaultAddressSpace().getMaxAddress()), 16) - 0x7FFF
                             emuHelper.writeRegister("RSP", stackAddr)
@@ -191,6 +191,7 @@ for fkey in fkeys:
                                 succ = emuHelper.run(monitor)
                                 if(succ == False):
                                     print("Emulation error: {}.  Aborting".format(emuHelper.getLastError()))
+                                    #print("Top stack mem: {}".format(emuHelper.readStackValue(0, 8, False)))
                                     break
                                 currExecAddr = emuHelper.getExecutionAddress()
                                 if (currExecAddr == bogusReturn):
