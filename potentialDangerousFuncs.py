@@ -9,8 +9,8 @@ import re
 #cleanup all teh address factory calls
 
 emulateIt = False
-args = getScriptArgs()
-if("emulate" in args):
+scriptArgs = getScriptArgs()
+if("emulate" in scriptArgs):
 	emulateIt = True
 
 TARGET_FUNC = "memcpy"
@@ -93,6 +93,8 @@ for fkey in fkeys:
     for call in calls:
         callerVariables = call[0].getAllVariables()
         res = ifc.decompileFunction(call[0], 60, monitor)
+        #retrieve the C code syntax for later searching
+        code = res.getDecompiledFunction().getC()
         high_func = res.getHighFunction()
         lsm = high_func.getLocalSymbolMap()
         symbols = lsm.getSymbols()
@@ -101,41 +103,50 @@ for fkey in fkeys:
             while opiter.hasNext():
                 op = opiter.next()
                 mnemonic = str(op.getMnemonic())
+                for s in symbols:
+                    print(s.getName())
                 if mnemonic == "CALL":
                     inputs = op.getInputs()
                     addr = inputs[0].getAddress()
                     args = inputs[1:] # List of VarnodeAST types
                     if addr == call[1]:
                         out += "Call to {} at {} in {} has {} argument/s:\n\t{}\n".format(fkey, op.getSeqnum().getTarget(), call[0].getName(), len(args), [x for x in args])
+                        hArgNames = []
                         for arg in args:
-                            out += "\tArg {}:\n".format(args.index(arg))
-                            vndef = arg.getDef()
-                            if vndef:
-                                vndef_inputs = vndef.getInputs()
-                                for defop_input in vndef_inputs:
-                                    defop_input_offset = defop_input.getAddress().getOffset() & bitmask
-                                    for cv in callerVariables:
-                                        unsigned_cv_offset = cv.getMinAddress().getUnsignedOffset() & bitmask
-                                        if unsigned_cv_offset == defop_input_offset:
-                                            out += "\t\t{}\n".format(cv)
-                                    for symbol in lsm.getSymbols():
-                                        if defop_input_offset == symbol.getStorage().getLastVarnode().getOffset() & bitmask:
-                                            if(symbol.isParameter()):
-                                                out += "\t\tIs calling func parameter\n"
-                                            code = res.getDecompiledFunction().getC()
-                                            #super noisy...not sure how much it actually helps.
-                                            #when there's not a lot of output and not a lot of duplication it's pretty good
-                                            #prints all occurences of the argument in hte function
-                                            #searchString = r".*?{}.*?\n".format(symbol.getName())
-                                            #prints all occurences of the function in question with the parameter in question
-                                            searchString = r".*?{}.*?{}.*?\n".format(fkey, symbol.getName())
-                                            matches = re.findall(searchString, code)
-                                            for m in matches:
-                                                out += "\t\t{}".format(m.lstrip())
-                                            #out += "\t\t{} \n".format(symbol.getName()))
-                                            #out += "\t\tType: {}\n".format(symbol.dataType))
-                                            #out += "\t\tSize: {}\n".format(symbol.size))
-                                            #out += "\t\tStor: {}\n".format(symbol.storage))
+                            highArg = arg.getHigh()
+                            print("arg {}".format(args.index(arg)))
+                            print(type(arg))
+                            print(arg)
+                            print(arg.getPCAddress())
+                            out += "\tArg {}:\t{} {}\n".format(args.index(arg), highArg.getDataType(), highArg.getName())
+                            highArgSym = highArg.getSymbol()
+                            print(highArgSym)
+                            try:
+                                print(highArgSym.getPCAddress())
+                            except:
+                                pass
+                            if(highArgSym in lsm.getSymbols()):
+                                if(highArgSym.isParameter()):
+                                    out += "\t\tIs parameter to calling function\n"
+                            if(highArg.getName() != "UNNAMED"):
+                                hArgNames.append(highArg.getName())
+                        #super noisy...not sure how much it actually helps.
+                        #when there's not a lot of output and not a lot of duplication it's pretty good
+                        #prints all occurences of the argument in hte function
+                        #searchString = r".*?{}.*?\n".format(symbol.getName())
+                        #prints all occurences of the function in question with the parameter in question
+                        searchNames = ''.join("%s.*?" % h for h in hArgNames)
+                        print("search term")
+                        print(searchNames)
+                        searchString = r".*?{}.*?{}\n".format(fkey, searchNames)
+                        matches = re.findall(searchString, code)
+                        out += "\tPossible C Code of this call:\n"
+                        for m in matches:
+                            out += "\t\t{}".format(m.lstrip())
+                            #out += "\t\t{} \n".format(symbol.getName()))
+                            #out += "\t\tType: {}\n".format(symbol.dataType))
+                            #out += "\t\tSize: {}\n".format(symbol.size))
+                            #out += "\t\tStor: {}\n".format(symbol.storage))
                         #instantiate eumlator helper to try and track values
                         if emulateIt:
                             emuHelper = EmulatorHelper(currentProgram)
