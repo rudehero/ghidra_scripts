@@ -49,7 +49,6 @@ funcs = fm.getExternalFunctions()
 def traceUniqueArg(arg, lsm, count=0):
         out = ""
         if(count > 10):
-            print("over 10 deep")
             return "\t\tHit recursion limit\n".format("\t" * (count + 1))
         argdef = arg.getDef()
         if not argdef:
@@ -134,6 +133,8 @@ for fkey in fkeys:
     out += "-------------------------------------------------------\n"
     calls = fnames[fkey]
     for call in calls:
+        if(not call):
+            continue
         callerVariables = call[0].getAllVariables()
         res = ifc.decompileFunction(call[0], 60, monitor)
         #retrieve the C code syntax for later searching
