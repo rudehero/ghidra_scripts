@@ -7,6 +7,7 @@ import ghidra.pcode.emulate.EmulateExecutionState
 import re
 #TODO -- Finalize emulation code; update to support 32 or 64 based on addr_size
 #cleanup all teh address factory calls
+#make it work for non x86?
 
 emulateIt = False
 scriptArgs = getScriptArgs()
@@ -32,8 +33,14 @@ TARGET_FUNCS = [
             "memcpy"
             ]
 
-addr_size = currentProgram.getMetadata()['Address Size']
-width = int(addr_size) // 8
+addr_size = int(currentProgram.getMetadata()['Address Size'])
+width = addr_size // 8
+if addr_size == 32:
+    stackPointer = "ESP"
+elif addr_size == 64:
+    stackPointer = "RSP"
+else:
+    stackPointer = "undefined"
 addrFactory = currentProgram.getAddressFactory()
 fm = currentProgram.getFunctionManager()
 funcs = fm.getExternalFunctions()
@@ -42,9 +49,8 @@ funcs = fm.getExternalFunctions()
 def traceUniqueArg(arg, lsm, count=0):
         out = ""
         if(count > 10):
-            print(arg)
             print("over 10 deep")
-            return "Hit recursive limit"
+            return "\t\tHit recursion limit\n".format("\t" * (count + 1))
         argdef = arg.getDef()
         if not argdef:
             return out
@@ -52,6 +58,13 @@ def traceUniqueArg(arg, lsm, count=0):
         if not argin:
             return out
         out += "\t\t{}{}\n".format("\t" * count, argdef)
+        if(argdef.getMnemonic() == "PTRSUB"):# and a.isRegister()):
+            if(str(currentProgram.getRegister(argin[0])) == stackPointer):
+                if(argin[1].isConstant()):
+                    for s in lsm.getSymbols():
+                        if(argin[1].getOffset() == s.getStorage().getFirstVarnode().getOffset()):
+                            out += "\t\t{}{}:{}\n".format("\t" * (count + 1), s.getName(), s.getStorage())
+                            return out
         for a in argin:
             if(a.isUnique()):
                 out += traceUniqueArg(a,lsm,(count + 1))
@@ -62,11 +75,17 @@ def traceUniqueArg(arg, lsm, count=0):
             else:
                 highArg = a.getHigh()
                 if not highArg:
+                    #for s in lsm.getSymbols():
+                    #    if(a.getOffset() == s.getStorage().getFirstVarnode().getOffset()):
+                    #        out += "\t\t{}{}\n".format("\t" * (count + 1), s.getName())
                     continue
                 out += "\t\t{}{} {}\n".format("\t" * (count + 1), highArg.getDataType(), highArg.getName())
                 if(highArg.getName() == "UNNAMED"):
                     out += traceUniqueArg(a,lsm,(count + 1))
                 highArgSym = highArg.getSymbol()
+                if(highArgSym):
+                    if("Stack" in str(highArgSym.getStorage())):
+                        out += "\t\t{}{}\n".format("\t" * (count + 1), highArgSym.getStorage())
                 if(highArgSym in lsm.getSymbols()):
                     if(highArgSym.isParameter()):
                         out += "\t\t{}Is parameter to calling function\n".format("\t" * (count + 1))
@@ -136,27 +155,44 @@ for fkey in fkeys:
                         hArgNames = []
                         for arg in args:
                             highArg = arg.getHigh()
-                            out += "\tArg {}:\t{} {}\n".format(args.index(arg), highArg.getDataType(), highArg.getName())
+                            argName = highArg.getName()
+                            if(arg.isConstant()):
+                                argName = "Constant"
+                            if(argName != "UNNAMED"):
+                                if(argName != "Constant"):
+                                    hArgNames.append(argName)
+                            else:
+                                argdef = arg.getDef()
+                                if argdef:
+                                    argin = argdef.getInputs()
+                                    if argin:
+                                        if(argdef.getMnemonic() == "PTRSUB"):# and a.isRegister()):
+                                            if(str(currentProgram.getRegister(argin[0])) == stackPointer):
+                                                if(argin[1].isConstant()):
+                                                    for s in lsm.getSymbols():
+                                                        if(argin[1].getOffset() == s.getStorage().getFirstVarnode().getOffset()):
+                                                            argName = s.getName()
+                                                            hArgNames.append(argName)
+
+                            out += "\tArg {}:\t{} {}\n".format(args.index(arg), highArg.getDataType(), argName)
 
                             highArgSym = highArg.getSymbol()
                             if(highArgSym in lsm.getSymbols()):
                                 if(highArgSym.isParameter()):
                                     out += "\t\tIs parameter to calling function\n"
-                            #if(arg.isUnique()):
                                 else:
                                     out += "{}".format(traceUniqueArg(arg,lsm))
                             else:
                                 out += "{}".format(traceUniqueArg(arg,lsm))
 
-                            if(highArg.getName() != "UNNAMED"):
-                                hArgNames.append(highArg.getName())
                         #super noisy...not sure how much it actually helps.
                         #when there's not a lot of output and not a lot of duplication it's pretty good
                         #prints all occurences of the argument in hte function
                         #searchString = r".*?{}.*?\n".format(symbol.getName())
                         #prints all occurences of the function in question with the parameter in question
                         searchNames = ''.join("%s.*?" % h for h in hArgNames)
-                        searchString = r".*?{}.*?{}\n".format(fkey, searchNames)
+                        searchString = r".*?{}\(.*?{}\n".format(fkey, searchNames)
+                        print(searchString)
                         matches = re.findall(searchString, code)
                         out += "\tPossible C Code of this call:\n"
                         for m in matches:
