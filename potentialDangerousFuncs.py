@@ -157,9 +157,8 @@ for fkey in fkeys:
                             highArg = arg.getHigh()
                             argName = highArg.getName()
                             if(arg.isConstant()):
-                                argName = "Constant"
+                                argName = hex(arg.getOffset())[0:-1]
                             if(argName != "UNNAMED"):
-                                if(argName != "Constant"):
                                     hArgNames.append(argName)
                             else:
                                 argdef = arg.getDef()
