@@ -32,22 +32,47 @@ TARGET_FUNCS = [
             "memcpy"
             ]
 
-bitness_masks = {
-        '16': 0xffff,
-        '32': 0xffffffff,
-        '64': 0xffffffffffffffff,
-    }
-
-try:
-      addr_size = currentProgram.getMetadata()['Address Size']
-      bitmask = bitness_masks[addr_size]
-      width = int(addr_size) // 8
-except KeyError:
-      raise Exception("Unsupported bitness: {}. Add a bit mask for this target.".format(addr_size))
-
-# Step 1. Get functions that call the target function ('callers')
+addr_size = currentProgram.getMetadata()['Address Size']
+width = int(addr_size) // 8
+addrFactory = currentProgram.getAddressFactory()
 fm = currentProgram.getFunctionManager()
 funcs = fm.getExternalFunctions()
+
+
+def traceUniqueArg(arg, lsm, count=0):
+        out = ""
+        if(count > 10):
+            print(arg)
+            print("over 10 deep")
+            return "Hit recursive limit"
+        argdef = arg.getDef()
+        if not argdef:
+            return out
+        argin = argdef.getInputs()
+        if not argin:
+            return out
+        out += "\t\t{}{}\n".format("\t" * count, argdef)
+        for a in argin:
+            if(a.isUnique()):
+                out += traceUniqueArg(a,lsm,(count + 1))
+            elif(a.isConstant()):
+                out += "\t\t{}const {}\n".format("\t" * (count + 1), a.getOffset())
+            elif(a.isAddress() and argdef.getMnemonic() == "CALL"):
+                out += "\t\t{}{}\n".format("\t" * (count + 1), fm.getFunctionAt(a.getAddress()))
+            else:
+                highArg = a.getHigh()
+                if not highArg:
+                    continue
+                out += "\t\t{}{} {}\n".format("\t" * (count + 1), highArg.getDataType(), highArg.getName())
+                if(highArg.getName() == "UNNAMED"):
+                    out += traceUniqueArg(a,lsm,(count + 1))
+                highArgSym = highArg.getSymbol()
+                if(highArgSym in lsm.getSymbols()):
+                    if(highArgSym.isParameter()):
+                        out += "\t\t{}Is parameter to calling function\n".format("\t" * (count + 1))
+        return out
+
+# Step 1. Get functions that call the target function ('callers')
 target_addr = 0
 fnames = dict()
 out = ""
@@ -76,7 +101,6 @@ for func in funcs:
 # Step 2. Decompile all callers and find PCODE CALL operations leading to `target_add`
 options = DecompileOptions()
 monitor = ConsoleTaskMonitor()
-addrFactory = currentProgram.getAddressFactory()
 #emuMonitor = ConsoleTaskMonitor()
 ifc = DecompInterface()
 ifc.setOptions(options)
@@ -103,8 +127,6 @@ for fkey in fkeys:
             while opiter.hasNext():
                 op = opiter.next()
                 mnemonic = str(op.getMnemonic())
-                for s in symbols:
-                    print(s.getName())
                 if mnemonic == "CALL":
                     inputs = op.getInputs()
                     addr = inputs[0].getAddress()
@@ -114,20 +136,18 @@ for fkey in fkeys:
                         hArgNames = []
                         for arg in args:
                             highArg = arg.getHigh()
-                            print("arg {}".format(args.index(arg)))
-                            print(type(arg))
-                            print(arg)
-                            print(arg.getPCAddress())
                             out += "\tArg {}:\t{} {}\n".format(args.index(arg), highArg.getDataType(), highArg.getName())
+
                             highArgSym = highArg.getSymbol()
-                            print(highArgSym)
-                            try:
-                                print(highArgSym.getPCAddress())
-                            except:
-                                pass
                             if(highArgSym in lsm.getSymbols()):
                                 if(highArgSym.isParameter()):
                                     out += "\t\tIs parameter to calling function\n"
+                            #if(arg.isUnique()):
+                                else:
+                                    out += "{}".format(traceUniqueArg(arg,lsm))
+                            else:
+                                out += "{}".format(traceUniqueArg(arg,lsm))
+
                             if(highArg.getName() != "UNNAMED"):
                                 hArgNames.append(highArg.getName())
                         #super noisy...not sure how much it actually helps.
@@ -136,8 +156,6 @@ for fkey in fkeys:
                         #searchString = r".*?{}.*?\n".format(symbol.getName())
                         #prints all occurences of the function in question with the parameter in question
                         searchNames = ''.join("%s.*?" % h for h in hArgNames)
-                        print("search term")
-                        print(searchNames)
                         searchString = r".*?{}.*?{}\n".format(fkey, searchNames)
                         matches = re.findall(searchString, code)
                         out += "\tPossible C Code of this call:\n"
