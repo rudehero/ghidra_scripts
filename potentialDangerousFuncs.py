@@ -165,13 +165,19 @@ for fkey in fkeys:
                                 if argdef:
                                     argin = argdef.getInputs()
                                     if argin:
-                                        if(argdef.getMnemonic() == "PTRSUB"):# and a.isRegister()):
+                                        if(argdef.getMnemonic() in ["PTRSUB"]):# and a.isRegister()):
                                             if(str(currentProgram.getRegister(argin[0])) == stackPointer):
                                                 if(argin[1].isConstant()):
                                                     for s in lsm.getSymbols():
                                                         if(argin[1].getOffset() == s.getStorage().getFirstVarnode().getOffset()):
                                                             argName = s.getName()
                                                             hArgNames.append(argName)
+                                        elif(argdef.getMnemonic() == "CAST"):
+                                            if(argin[0].getHigh()):
+                                                argName = argin[0].getHigh().getName()
+                                                if(argName != "UNNAMED"):
+                                                    hArgNames.append(argName)
+                                            
 
                             out += "\tArg {}:\t{} {}\n".format(args.index(arg), highArg.getDataType(), argName)
 
@@ -191,7 +197,7 @@ for fkey in fkeys:
                         #prints all occurences of the function in question with the parameter in question
                         searchNames = ''.join("%s.*?" % h for h in hArgNames)
                         searchString = r".*?{}\(.*?{}\n".format(fkey, searchNames)
-                        print(searchString)
+                        #print(searchString)
                         matches = re.findall(searchString, code)
                         out += "\tPossible C Code of this call:\n"
                         for m in matches:
