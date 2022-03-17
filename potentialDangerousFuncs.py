@@ -69,7 +69,7 @@ def traceUniqueArg(arg, lsm, count=0):
             if(a.isUnique()):
                 out += traceUniqueArg(a,lsm,(count + 1))
             elif(a.isConstant()):
-                out += "\t\t{}const {}\n".format("\t" * (count + 1), a.getOffset())
+                out += "\t\t{}const {}\n".format("\t" * (count + 1), hex(a.getOffset())[0:-1])
             elif(a.isAddress() and argdef.getMnemonic() == "CALL"):
                 out += "\t\t{}{}\n".format("\t" * (count + 1), fm.getFunctionAt(a.getAddress()))
             else:
