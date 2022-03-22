@@ -5,6 +5,11 @@ from ghidra.util.task import ConsoleTaskMonitor
 import ghidra.program.model.data
 import ghidra.pcode.emulate.EmulateExecutionState
 import re
+#in the event xrefs are printed but no calls are printed:
+#possibly a jump/call table in use, indirect calling preventing ghidra from
+#finding a specific static op calling to the function
+#at this point you just have to go into ghidra proper to investigate further if warranted
+
 #TODO -- Finalize emulation code; update to support 32 or 64 based on addr_size
 #cleanup all teh address factory calls
 #make it work for non x86?
@@ -33,7 +38,15 @@ else:
     stackPointer = "undefined"
 addrFactory = currentProgram.getAddressFactory()
 fm = currentProgram.getFunctionManager()
-funcs = fm.getExternalFunctions()
+#external functions
+ExtFuncs = fm.getExternalFunctions()
+#append internal functions
+IntFuncs = fm.getFunctions(True)
+funcs = []
+for e in ExtFuncs:
+    funcs.append(e)
+for i in IntFuncs:
+    funcs.append(i)
 
 
 #trace back the source of unique arguments
@@ -67,9 +80,6 @@ def traceUniqueArg(arg, lsm, count=0):
             else:
                 highArg = a.getHigh()
                 if not highArg:
-                    #for s in lsm.getSymbols():
-                    #    if(a.getOffset() == s.getStorage().getFirstVarnode().getOffset()):
-                    #        out += "\t\t{}{}\n".format("\t" * (count + 1), s.getName())
                     continue
                 out += "\t\t{}{} {}\n".format("\t" * (count + 1), highArg.getDataType(), highArg.getName())
                 if(highArg.getName() == "UNNAMED"):
@@ -96,19 +106,28 @@ fnames = dict()
 for func in funcs:
     if func.getName() in TARGET_FUNCS:
         calls = []
+        refs = getReferencesTo(func.getEntryPoint())
         thunks = func.getFunctionThunkAddresses()
-        thunk = thunks[0]
-        refs = getReferencesTo(thunk)
+        thunkRefs = []
+        if(not isinstance(thunks, None.__class__)):
+            #seems to always be subset 0, but just in case check all
+            for thunk in thunks:
+                thunkRefs += getReferencesTo(thunk)
         xrefs = []
+        for tRef in thunkRefs:
+            if tRef.referenceType.isData():
+                pass
+            else:
+                for r in getReferencesTo(tRef.getFromAddress()):
+                    xrefs.append((r.getFromAddress(), r.getToAddress(), r.getReferenceType()))
         for ref in refs:
             if ref.referenceType.isData():
                 pass
             else:
-                for r in getReferencesTo(ref.fromAddress):
-                    xrefs.append((r.fromAddress, r.toAddress))
+                xrefs.append((ref.getFromAddress(), ref.getToAddress(), ref.getReferenceType()))
         for xref in xrefs:
-                call = getFunctionContaining(xref[0])
-                calls.append((call, xref[1]))
+                caller = getFunctionContaining(xref[0])
+                calls.append((caller, xref[1], xref[0], xref[2]))
         calls = list(set(calls))
         fnames[func.getName()] = calls
 
@@ -133,6 +152,12 @@ for fkey in fkeys:
     out += "{}\n".format(fkey.center(54))
     out += "-------------------------------------------------------\n"
     calls = fnames[fkey]
+    out += "XREF List\n".format(fkey.center(54))
+    
+    for call in calls:
+        out += "{} to {} from {} reportedly in function {}\n".format(call[3], call[1], call[2], call[0])
+    out += "-------------------------------------------------------\n"
+    
     for call in calls:
         if(not call):
             continue
@@ -152,7 +177,35 @@ for fkey in fkeys:
             while opiter.hasNext():
                 op = opiter.next()
                 mnemonic = str(op.getMnemonic())
-                if mnemonic == "CALL":
+                if mnemonic == "CBRANCH":
+                    inputs = op.getInputs()
+                    addr = inputs[0].getAddress()
+                    if addr == call[1]:
+                        out += "Jump to {} at {} in {}\n".format(fkey, op.getSeqnum().getTarget(), call[0].getName())
+                elif mnemonic == "CALLIND":
+                    inputs = op.getInputs()
+                    addr = inputs[0].getAddress()
+                    if addr == call[1]:
+                        out += "Jump to {} at {} in {}\n".format(fkey, op.getSeqnum().getTarget(), call[0].getName())
+                #this one likely needs work but i haven't had an example of it come up yet
+                elif mnemonic == "BRANCHIND":
+                    inputs = op.getInputs()
+                    addr = inputs[0].getAddress()
+                    print(addr)
+                    print(call[1])
+                    if addr == call[1]:
+                        out += "Jump to {} at {} in {}\n".format(fkey, op.getSeqnum().getTarget(), call[0].getName())
+                elif mnemonic == "BRANCH":
+                    inputs = op.getInputs()
+                    addr = inputs[0].getAddress()
+                    if addr == call[1]:
+                        out += "Jump to {} at {} in {}\n".format(fkey, op.getSeqnum().getTarget(), call[0].getName())
+                elif mnemonic == "CALLIND":
+                    inputs = op.getInputs()
+                    addr = inputs[0].getAddress()
+                    if addr == call[1]:
+                        out += "Indirect Call to {} at {} in {}\n".format(fkey, op.getSeqnum().getTarget(), call[0].getName())
+                elif mnemonic == "CALL":
                     inputs = op.getInputs()
                     addr = inputs[0].getAddress()
                     args = inputs[1:] 
@@ -209,7 +262,7 @@ for fkey in fkeys:
 
 
     #only output a file with contents if one of the calls of interest was actually found
-    if("Call" in out):
+    if("XREF" in out):
         f = open(currentProgram.getName() + fkey + ".funcUsage.txt", 'w')
         f.write(out)
-    f.close()
+        f.close()
