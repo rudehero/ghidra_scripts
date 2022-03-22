@@ -8,13 +8,18 @@ import re
 #TODO -- Finalize emulation code; update to support 32 or 64 based on addr_size
 #cleanup all teh address factory calls
 #make it work for non x86?
+#acknowledgement to https://github.com/HackOvert/GhidraSnippets
+#which was incredibly useful when first starting out working with the Ghidra
+#python API
+#the snippet "Analyzing function arguments at cross references" served as a starting point
+#for the driver portion of this script
+
 
 emulateIt = False
 scriptArgs = getScriptArgs()
 if("emulate" in scriptArgs):
 	emulateIt = True
 
-TARGET_FUNC = "memcpy"
 TARGET_FUNCS = [
 #            "strcpy",
             "strcat",
@@ -33,11 +38,11 @@ TARGET_FUNCS = [
             "memcpy"
             ]
 
-addr_size = int(currentProgram.getMetadata()['Address Size'])
-width = addr_size // 8
-if addr_size == 32:
+addrSize = int(currentProgram.getMetadata()['Address Size'])
+width = addrSize // 8
+if addrSize == 32:
     stackPointer = "ESP"
-elif addr_size == 64:
+elif addrSize == 64:
     stackPointer = "RSP"
 else:
     stackPointer = "undefined"
@@ -46,6 +51,9 @@ fm = currentProgram.getFunctionManager()
 funcs = fm.getExternalFunctions()
 
 
+#trace back the source of unique arguments
+#also just keep tracing arguments back to their eventual source
+#called after first look at args, and then calls itself as well
 def traceUniqueArg(arg, lsm, count=0):
         out = ""
         if(count > 10):
@@ -57,7 +65,7 @@ def traceUniqueArg(arg, lsm, count=0):
         if not argin:
             return out
         out += "\t\t{}{}\n".format("\t" * count, argdef)
-        if(argdef.getMnemonic() == "PTRSUB"):# and a.isRegister()):
+        if(argdef.getMnemonic() == "PTRSUB"):
             if(str(currentProgram.getRegister(argin[0])) == stackPointer):
                 if(argin[1].isConstant()):
                     for s in lsm.getSymbols():
@@ -90,13 +98,19 @@ def traceUniqueArg(arg, lsm, count=0):
                         out += "\t\t{}Is parameter to calling function\n".format("\t" * (count + 1))
         return out
 
-# Step 1. Get functions that call the target function ('callers')
+#main driving code
+#find the functions of interest and get all xrefs to the functions
+#since i'm looking for library calls need to find the thunk address
+#since the thunk is what will actually be xref'd
+#for each xref creates a tuple with the function containing the call
+#  and the address called to
+#all of the xref tuples are put into a list, and deduplicated
+#then a dictionary is created tieing hte lists to the function name of interest
 target_addr = 0
 fnames = dict()
 out = ""
 out += "-------------------------------------------------------\n"
 for func in funcs:
-    #if func.getName() == TARGET_FUNC:
     if func.getName() in TARGET_FUNCS:
         calls = []
         out += "\nFound {} @ 0x{}\n".format(func.getName(), func.getEntryPoint())
@@ -116,13 +130,17 @@ for func in funcs:
         calls = list(set(calls))
         fnames[func.getName()] = calls
 
-# Step 2. Decompile all callers and find PCODE CALL operations leading to `target_add`
-options = DecompileOptions()
+#set up decompiliation interface, iterate through all of the calls of interest
+#and decompile each call that was previously found
+#retrieves C code for each iteration to search for the actual call in C based
+#on wildcards as identified argument names
+#as such it may not find the actual call in C code or it might find multiple potential
+#matches which require user analysis to determine
 monitor = ConsoleTaskMonitor()
-#emuMonitor = ConsoleTaskMonitor()
-ifc = DecompInterface()
-ifc.setOptions(options)
-ifc.openProgram(currentProgram)
+decompOptions = DecompileOptions()
+decompIface = DecompInterface()
+decompIface.setOptions(decompOptions)
+decompIface.openProgram(currentProgram)
 
 out += "-------------------------------------------------------\n"
 fkeys = fnames.keys()
@@ -136,13 +154,15 @@ for fkey in fkeys:
         if(not call):
             continue
         callerVariables = call[0].getAllVariables()
-        res = ifc.decompileFunction(call[0], 60, monitor)
+        res = decompIface.decompileFunction(call[0], 60, monitor)
         #retrieve the C code syntax for later searching
         code = res.getDecompiledFunction().getC()
         high_func = res.getHighFunction()
         lsm = high_func.getLocalSymbolMap()
         symbols = lsm.getSymbols()
         if high_func:
+            #get all pcode for the function, iterate until reaching the 
+            #stored call
             opiter = high_func.getPcodeOps()
             while opiter.hasNext():
                 op = opiter.next()
@@ -150,8 +170,11 @@ for fkey in fkeys:
                 if mnemonic == "CALL":
                     inputs = op.getInputs()
                     addr = inputs[0].getAddress()
-                    args = inputs[1:] # List of VarnodeAST types
+                    args = inputs[1:] 
                     if addr == call[1]:
+                        #after finding the call of interest append info for the arguments
+                        #then begin iterating through the arguments and appending their info
+                        #and tracing them back further if necessary
                         out += "Call to {} at {} in {} has {} argument/s:\n\t{}\n".format(fkey, op.getSeqnum().getTarget(), call[0].getName(), len(args), [x for x in args])
                         hArgNames = []
                         for arg in args:
@@ -166,7 +189,7 @@ for fkey in fkeys:
                                 if argdef:
                                     argin = argdef.getInputs()
                                     if argin:
-                                        if(argdef.getMnemonic() in ["PTRSUB"]):# and a.isRegister()):
+                                        if(argdef.getMnemonic() in ["PTRSUB"]):
                                             if(str(currentProgram.getRegister(argin[0])) == stackPointer):
                                                 if(argin[1].isConstant()):
                                                     for s in lsm.getSymbols():
@@ -191,22 +214,12 @@ for fkey in fkeys:
                             else:
                                 out += "{}".format(traceUniqueArg(arg,lsm))
 
-                        #super noisy...not sure how much it actually helps.
-                        #when there's not a lot of output and not a lot of duplication it's pretty good
-                        #prints all occurences of the argument in hte function
-                        #searchString = r".*?{}.*?\n".format(symbol.getName())
-                        #prints all occurences of the function in question with the parameter in question
                         searchNames = ''.join("%s.*?" % h for h in hArgNames)
                         searchString = r".*?{}\(.*?{}\n".format(fkey, searchNames)
-                        #print(searchString)
                         matches = re.findall(searchString, code)
                         out += "\tPossible C Code of this call:\n"
                         for m in matches:
                             out += "\t\t{}".format(m.lstrip())
-                            #out += "\t\t{} \n".format(symbol.getName()))
-                            #out += "\t\tType: {}\n".format(symbol.dataType))
-                            #out += "\t\tSize: {}\n".format(symbol.size))
-                            #out += "\t\tStor: {}\n".format(symbol.storage))
                         #instantiate eumlator helper to try and track values
                         if emulateIt:
                             emuHelper = EmulatorHelper(currentProgram)
@@ -273,36 +286,12 @@ for fkey in fkeys:
                                     out += "Emulator derived param values\n"
                                     out += "\tArg1: {}\tArg2: {}\tArg3: {}".format(emuHelper.readRegister("RDI"), emuHelper.readRegister("RSI"), emuHelper.readRegister("RDX"))
                                     break
-                                '''
-                                emuStatus = emuHelper.getExecutionState()
-#ghidra.pcode.emulate.EmulateExecutionState
-                                #check status of the emulator
-                                #might actually be more than I need
-                                if(emuStatus == ghidra.pcode.emulate.EmulateExecutionState.BREAKPOINT):
-                                    #check address of breakpoint
-                                    if(currExecAddr == op.getSeqnum().getTarget()):
-                                        print("At the call!")
-                                        out += "Emulator derived param values\n"
-                                        out += "\tArg1: {}\tArg2: {}\tArg3: {}".format(emuHelper.readRegister("RDI"), emuHelper.readRegister("RSI"), emuHelper.readRegister("RDX"))
-                                        
-
-
-                                elif(emuStatus == ghidra.pcode.emulate.EmulateExecutionState.FAULT):
-                                    #check fault and take action
-                                elif(emuStatus == ghidra.pcode.emulate.EmulateExecutionState.STOPPED):
-                                    #honestly not sure what to do here...
-                            '''
                             #end emulation, clear out emuhelper
                             emuHelper.dispose()
-
-
-
                             
-
-
-
                         out += "\n----------------------------------\n"
 
+#only output a file with contents if one of the calls of interest was actually found
 if("Found" in out):
     f = open(currentProgram.getName() + ".dangFuncs.txt", 'w')
     f.write(out)
