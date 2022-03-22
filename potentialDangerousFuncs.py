@@ -153,6 +153,8 @@ for fkey in fkeys:
     for call in calls:
         if(not call):
             continue
+        elif(isinstance(call[0], None.__class__)):
+            continue
         callerVariables = call[0].getAllVariables()
         res = decompIface.decompileFunction(call[0], 60, monitor)
         #retrieve the C code syntax for later searching
