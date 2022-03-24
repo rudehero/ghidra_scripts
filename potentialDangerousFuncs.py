@@ -299,5 +299,8 @@ for fkey in fkeys:
 #only output a file with contents if one of the calls of interest was actually found
 if("Found" in out):
     f = open(currentProgram.getName() + ".dangFuncs.txt", 'w')
+	f.write("Binary name: {}\n".format(currentProgram.getName()))
+    f.write("Location in Ghidra Project: {}\n".format(currentProgram.getDomainFile()))
+    f.write("Location on disk: {}\n".format(currentProgram.getExecutablePath()))
     f.write(out)
     f.close()
