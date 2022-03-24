@@ -263,6 +263,6 @@ for fkey in fkeys:
 
     #only output a file with contents if one of the calls of interest was actually found
     if("XREF" in out):
-        f = open(currentProgram.getName() + fkey + ".funcUsage.txt", 'w')
+        f = open(currentProgram.getName() + "." + fkey + ".funcUsage.txt", 'w')
         f.write(out)
         f.close()
