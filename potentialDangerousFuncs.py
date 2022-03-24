@@ -35,7 +35,10 @@ TARGET_FUNCS = [
             "vfscanf",
             "system",
             "exec",
-            "memcpy"
+            "memcpy",
+            "execl",
+            "execv",
+            "execve"
             ]
 
 addrSize = int(currentProgram.getMetadata()['Address Size'])
