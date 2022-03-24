@@ -38,15 +38,9 @@ else:
     stackPointer = "undefined"
 addrFactory = currentProgram.getAddressFactory()
 fm = currentProgram.getFunctionManager()
-#external functions
-ExtFuncs = fm.getExternalFunctions()
-#append internal functions
-IntFuncs = fm.getFunctions(True)
-funcs = []
-for e in ExtFuncs:
-    funcs.append(e)
-for i in IntFuncs:
-    funcs.append(i)
+#pulls back external and internal functions, but not the external stubs
+#NOTE TO SELF: might be worth changing dangerousfuns to utilize this
+funcs = fm.getFunctionsNoStubs(True)
 
 
 #trace back the source of unique arguments
@@ -96,7 +90,6 @@ def traceUniqueArg(arg, lsm, count=0):
 #main driving code
 #find the functions of interest and get all xrefs to the functions
 #since i'm looking for library calls need to find the thunk address
-#since the thunk is what will actually be xref'd
 #for each xref creates a tuple with the function containing the call
 #  and the address called to
 #all of the xref tuples are put into a list, and deduplicated
@@ -107,29 +100,20 @@ for func in funcs:
     if func.getName() in TARGET_FUNCS:
         calls = []
         refs = getReferencesTo(func.getEntryPoint())
-        thunks = func.getFunctionThunkAddresses()
-        thunkRefs = []
-        if(not isinstance(thunks, None.__class__)):
-            #seems to always be subset 0, but just in case check all
-            for thunk in thunks:
-                thunkRefs += getReferencesTo(thunk)
         xrefs = []
-        for tRef in thunkRefs:
-            if tRef.referenceType.isData():
-                pass
-            else:
-                for r in getReferencesTo(tRef.getFromAddress()):
-                    xrefs.append((r.getFromAddress(), r.getToAddress(), r.getReferenceType()))
         for ref in refs:
             if ref.referenceType.isData():
                 pass
             else:
                 xrefs.append((ref.getFromAddress(), ref.getToAddress(), ref.getReferenceType()))
+        xrefList = []
         for xref in xrefs:
                 caller = getFunctionContaining(xref[0])
-                calls.append((caller, xref[1], xref[0], xref[2]))
+                xrefList.append((caller, xref[1], xref[0], xref[2]))
+                if not (caller in [c[0] for c in calls]):
+                    calls.append((caller, xref[1], xref[0], xref[2]))
         calls = list(set(calls))
-        fnames[func.getName()] = calls
+        fnames[func.getName()] = (calls, xrefList)
 
 #set up decompiliation interface, iterate through all of the calls of interest
 #and decompile each call that was previously found
@@ -151,11 +135,11 @@ for fkey in fkeys:
     out += "-------------------------------------------------------\n"
     out += "{}\n".format(fkey.center(54))
     out += "-------------------------------------------------------\n"
-    calls = fnames[fkey]
+    calls = fnames[fkey][0]
     out += "XREF List\n".format(fkey.center(54))
     
-    for call in calls:
-        out += "{} to {} from {} reportedly in function {}\n".format(call[3], call[1], call[2], call[0])
+    for x in fnames[fkey][1]:
+        out += "{} to {} from {} reportedly in function {}\n".format(x[3], x[1], x[2], x[0])
     out += "-------------------------------------------------------\n"
     
     for call in calls:
@@ -191,8 +175,6 @@ for fkey in fkeys:
                 elif mnemonic == "BRANCHIND":
                     inputs = op.getInputs()
                     addr = inputs[0].getAddress()
-                    print(addr)
-                    print(call[1])
                     if addr == call[1]:
                         out += "Jump to {} at {} in {}\n".format(fkey, op.getSeqnum().getTarget(), call[0].getName())
                 elif mnemonic == "BRANCH":
