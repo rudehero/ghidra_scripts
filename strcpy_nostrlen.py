@@ -300,7 +300,7 @@ if("strcpy" in out):
         f = open(currentProgram.getName() + ".strCpyNoStrLen.txt", 'w')
     else:
         f = open(currentProgram.getName() + ".strCpy.txt", 'w')
-	f.write("Binary name: {}\n".format(currentProgram.getName()))
+    f.write("Binary name: {}\n".format(currentProgram.getName()))
     f.write("Location in Ghidra Project: {}\n".format(currentProgram.getDomainFile()))
     f.write("Location on disk: {}\n".format(currentProgram.getExecutablePath()))
     f.write(out)
