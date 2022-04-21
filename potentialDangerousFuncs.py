@@ -38,7 +38,8 @@ TARGET_FUNCS = [
             "memcpy",
             "execl",
             "execv",
-            "execve"
+            "execve",
+            "getenv"
             ]
 
 addrSize = int(currentProgram.getMetadata()['Address Size'])
@@ -90,6 +91,10 @@ def traceUniqueArg(arg, lsm, count=0):
                     #        out += "\t\t{}{}\n".format("\t" * (count + 1), s.getName())
                     continue
                 out += "\t\t{}{} {}\n".format("\t" * (count + 1), highArg.getDataType(), highArg.getName())
+                #INT_ZEXT commonly seen on casts to ulong, so attempt to trace these back further
+                if(argdef.getMnemonic() == 'INT_ZEXT'):
+                    out += traceUniqueArg(a, lsm,(count + 1))
+                #try to continue tracing if the var is unnamed
                 if(highArg.getName() == "UNNAMED"):
                     out += traceUniqueArg(a,lsm,(count + 1))
                 highArgSym = highArg.getSymbol()
